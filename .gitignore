@@ -1,0 +1,7 @@
+node_modules/
+skills/news/scripts/
+skills/news/package.json
+*.tgz
+coverage/
+dist/
+.DS_Store
