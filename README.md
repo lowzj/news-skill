@@ -1,6 +1,6 @@
 # NEWS Skill
 
-在 Codex、Claude Code、OpenCode、Pi 中用自然语言查询 [NEWS](https://news.xairouter.com) 已收录的新闻，得到带摘要和来源的简报，并可按需提供原文链接。
+在 Codex、Claude Code、OpenCode、Pi 中用自然语言查询 [NEWS](https://xabcnews.com) 已收录的新闻，得到带摘要和来源的简报，并可按需提供原文链接。
 
 ```text
 用 news 看今天 OpenAI 的重要新闻，给我 5 条，每条附原文链接。

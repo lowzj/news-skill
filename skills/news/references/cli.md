@@ -21,7 +21,7 @@ Resolve that absolute path from the loaded `SKILL.md`. Node.js 22.12+ is require
 | `news skills install --agent AGENT` | Install the skill for a selected Agent. |
 | `news --help` | Show the CLI's current usage. |
 
-The default service is `https://news.xairouter.com`. Network operations use public GET endpoints: `/topics`, `/days`, `/digest`, and `/insight`. There is no `/search` endpoint; searching is performed locally after retrieving digest pages. The CLI cannot create topics, trigger collection, or generate new server analysis.
+The default service is `https://xabcnews.com`. Network operations use public GET endpoints: `/topics`, `/days`, `/digest`, and `/insight`. There is no `/search` endpoint; searching is performed locally after retrieving digest pages. The CLI cannot create topics, trigger collection, or generate new server analysis.
 
 ## Select news
 
