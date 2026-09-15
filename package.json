@@ -1,6 +1,6 @@
 {
   "name": "@lowzj/news-skill",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "NEWS CLI and Agent Skill for Codex, Claude Code, OpenCode, and Pi.",
   "type": "module",
   "license": "UNLICENSED",

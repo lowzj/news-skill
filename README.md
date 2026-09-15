@@ -103,5 +103,3 @@ npm test
 ```
 
 TypeScript 提供 API 响应、查询参数和安装逻辑的类型约束；安装包包含编译后的 JavaScript，用户运行时无需 `ts-node`、`tsx` 或 TypeScript 编译器。构建产物同时放入 Skill，使 CLI 与 Agent 使用同一套查询实现。
-
-安装与 Skill 分发方式参考了 [talkoda-cli](https://github.com/lowzj/talkoda-cli)，本项目独立实现。
