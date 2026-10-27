@@ -32,7 +32,7 @@ export interface TopicDigest extends Topic {
 export interface Digest {
   day: string | null;
   timezone: string;
-  generated_at: string;
+  generated_at?: string;
   topics: TopicDigest[];
 }
 

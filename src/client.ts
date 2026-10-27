@@ -232,7 +232,7 @@ export class NewsClient implements NewsAPI {
     return {
       day: data.day === null ? null : date(data.day, 'day'),
       timezone,
-      generated_at: timestamp(data.generated_at, 'generated_at', false)!,
+      ...(data.generated_at !== undefined ? { generated_at: timestamp(data.generated_at, 'generated_at', false)! } : {}),
       topics: array(data.topics, 'topics').map((value) => {
         const row = object(value, 'topic digest');
         return {

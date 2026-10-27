@@ -23,7 +23,7 @@ function topic(id, items = [], next = null, overrides = {}) {
 }
 
 function digest(day, topics, overrides = {}) {
-  return { day, topics, timezone: 'Asia/Shanghai', generated_at: NOW.toISOString(), ...overrides };
+  return { day, topics, timezone: 'Asia/Shanghai', ...overrides };
 }
 
 function api(respond) {
@@ -90,7 +90,7 @@ test('finds a match present only on a later page and keeps independent topic cur
 test('does not mistake a recent generated_at for the latest available content day', async () => {
   const client = api(() => digest('2026-09-05', [topic('news', [item('stale')], null, {
     updated_at: '2026-09-05T10:00:00Z', latest_day: '2026-09-05',
-  })]));
+  })], { generated_at: NOW.toISOString() }));
   const result = await queryNews(client, {}, NOW);
   assert.deepEqual(result.coverage.days, ['2026-09-05']);
   assert.deepEqual(result.items[0].days, ['2026-09-05']);

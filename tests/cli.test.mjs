@@ -17,7 +17,7 @@ const item = (id, extra = {}) => ({
   first_seen_at: `${DAY}T11:00:00Z`, tags: ['AI'], importance: 3, pinned: false, ...extra,
 });
 const digest = (items = [], extra = {}) => ({
-  day: DAY, timezone: 'Asia/Shanghai', generated_at: TIME,
+  day: DAY, timezone: 'Asia/Shanghai',
   topics: [topic({ items, total: items.length, next: null })], ...extra,
 });
 
@@ -101,6 +101,41 @@ test('public commands issue only GET requests without authentication and keep st
   }
 });
 
+test('read returns the top three across pages without generated_at, globally or for a topic', async t => {
+  const server = await service(t, (_request, response, url) => {
+    assert.equal(url.pathname, '/digest');
+    json(response, url.searchParams.has('after')
+      ? digest([item('third', { importance: 3 }), item('first', { importance: 5 })])
+      : digest([], { topics: [topic({
+        items: [item('fourth', { importance: 2 }), item('second', { importance: 4 })],
+        total: 4, next: 'next-page',
+      })] }));
+  });
+  for (const selection of [[], ['--topic', 'openai']]) {
+    const result = JSON.parse(success(await run(server.url, ['read', '--limit', '3', '--sort', 'importance', ...selection])));
+    assert.deepEqual(result.items.map(row => row.id), ['first', 'second', 'third']);
+    assert.equal(result.returned, 3);
+    assert.equal(result.matched, 4);
+    assert.equal(result.coverage.complete, true);
+    assert.equal(result.coverage.pages_fetched, 2);
+    assert.deepEqual(result.coverage.days, [DAY]);
+    assert.deepEqual(result.sources, [{ topic_id: 'openai', day: DAY, updated_at: TIME }]);
+  }
+  assert.equal(server.requests.length, 4);
+  for (const request of [server.requests[1], server.requests[3]]) {
+    assert.equal(request.url.searchParams.get('after'), 'next-page');
+    assert.equal(request.url.searchParams.get('topic'), 'openai');
+    assert.equal(request.url.searchParams.get('day'), DAY);
+  }
+});
+
+test('read still accepts legacy digest responses with generated_at', async t => {
+  const server = await service(t, (_request, response) => json(response, digest([item('legacy')], { generated_at: TIME })));
+  const result = JSON.parse(success(await run(server.url, ['read', '--limit', '3', '--sort', 'importance'])));
+  assert.deepEqual(result.items.map(row => row.id), ['legacy']);
+  assert.equal(result.coverage.complete, true);
+});
+
 test('search follows escaped cursors, ranks across pages, and renders original links with publication and collection dates', async t => {
   const cursor = 'cursor + / &= 下一页';
   const old = item('old', { title: 'Claude Code 旧更新', published_at: `${DAY}T01:00:00Z` });
@@ -172,6 +207,9 @@ test('HTML 200, malformed JSON, and unexpected schemas fail without partial stdo
 test('digest schema validation rejects impossible calendar dates and malformed news fields', async t => {
   for (const [label, payload] of [
     ['impossible day', digest([], { day: '2026-02-30' })],
+    ['null generated_at', digest([], { generated_at: null })],
+    ['non-string generated_at', digest([], { generated_at: 123 })],
+    ['invalid generated_at', digest([], { generated_at: 'not-a-timestamp' })],
     ['invalid importance', digest([item('bad', { importance: 7 })])],
     ['missing tags', digest([item('bad', { tags: undefined })])],
     ['invalid timezone', digest([], { timezone: 'not/a/timezone' })],
