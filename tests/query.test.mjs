@@ -9,7 +9,7 @@ function item(id, overrides = {}) {
   return {
     id, title: `新闻 ${id}`, summary: '', title_en: `News ${id}`, summary_en: '',
     url: `https://example.com/${id}`, source: 'Example', published_at: `${TODAY}T00:00:00Z`,
-    first_seen_at: `${TODAY}T00:00:00Z`, tags: [], importance: 3, pinned: false,
+    first_seen_at: `${TODAY}T00:00:00Z`, tags: [], tags_en: [], importance: 3, pinned: false, image: null,
     ...overrides,
   };
 }
@@ -17,7 +17,7 @@ function item(id, overrides = {}) {
 function topic(id, items = [], next = null, overrides = {}) {
   return {
     id, name: id.toUpperCase(), name_en: id, description: '', latest_day: TODAY,
-    updated_at: '2026-09-09T16:01:00Z', total: items.length, next, items,
+    updated_at: '2026-09-09T16:01:00Z', revision: 7, total: items.length, next, items,
     ...overrides,
   };
 }
@@ -61,10 +61,11 @@ test('finds literal bilingual, source and tag phrases using NFKC normalization',
     item('english', { summary_en: 'A new Ｃｌａｕｄｅ Ｃｏｄｅ update' }),
     item('source', { source: 'Claude Code Team' }),
     item('tag', { tags: ['Claude Code'] }),
+    item('english-tag', { tags_en: ['Claude Code'] }),
     item('not-phrase', { title: 'Claude improves its new Code features' }),
   ], 'second')]));
   const result = await queryNews(client, { query: 'CLAUDE CODE', maxPages: 1 }, NOW);
-  assert.deepEqual(result.items.map(row => row.id).sort(), ['english', 'source', 'tag']);
+  assert.deepEqual(result.items.map(row => row.id).sort(), ['english', 'english-tag', 'source', 'tag']);
   assert.equal(result.coverage.complete, false);
 });
 
@@ -87,10 +88,10 @@ test('finds a match present only on a later page and keeps independent topic cur
   assert.equal(result.coverage.pages_fetched, 3);
 });
 
-test('does not mistake a recent generated_at for the latest available content day', async () => {
+test('keeps stale collection dates distinct from retrieval time', async () => {
   const client = api(() => digest('2026-09-05', [topic('news', [item('stale')], null, {
     updated_at: '2026-09-05T10:00:00Z', latest_day: '2026-09-05',
-  })], { generated_at: NOW.toISOString() }));
+  })]));
   const result = await queryNews(client, {}, NOW);
   assert.deepEqual(result.coverage.days, ['2026-09-05']);
   assert.deepEqual(result.items[0].days, ['2026-09-05']);
@@ -133,8 +134,8 @@ test('deduplicates transitively by ID and normalized source URL, retaining assoc
     topic('openai', [item('one', { url: 'https://example.com/a?utm_source=feed#section', pinned: true })]),
     topic('anthropic', [item('two', { url: 'https://example.com/b?edition=1', importance: 5 })]),
   ] : [
-    topic('openai', [item('one', { url: 'https://example.com/b?edition=1&gclid=123', tags: ['merge'] })]),
-    topic('anthropic', [item('three', { url: 'https://example.com/a?fbclid=123', tags: ['source'] })]),
+    topic('openai', [item('one', { url: 'https://example.com/b?edition=1&gclid=123', tags: ['merge'], tags_en: ['merged'] })]),
+    topic('anthropic', [item('three', { url: 'https://example.com/a?fbclid=123', tags: ['source'], tags_en: ['source'] })]),
   ]));
   const result = await queryNews(client, { from: '2026-09-09', to: TODAY }, NOW);
   assert.equal(result.matched, 1);
@@ -142,6 +143,7 @@ test('deduplicates transitively by ID and normalized source URL, retaining assoc
   assert.deepEqual(result.items[0].topic_names, ['ANTHROPIC', 'OPENAI']);
   assert.deepEqual(result.items[0].days, [TODAY, '2026-09-09']);
   assert.deepEqual(result.items[0].tags.sort(), ['merge', 'source']);
+  assert.deepEqual(result.items[0].tags_en.sort(), ['merged', 'source']);
   assert.equal(result.items[0].pinned, true);
   assert.equal(result.items[0].importance, 5);
   assert.equal(result.sources.length, 4);

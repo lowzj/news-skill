@@ -23,6 +23,17 @@ Resolve that absolute path from the loaded `SKILL.md`. Node.js 22.12+ is require
 
 The default service is `https://xabcnews.com`. Network operations use public GET endpoints: `/topics`, `/days`, `/digest`, and `/insight`. There is no `/search` endpoint; searching is performed locally after retrieving digest pages. The CLI cannot create topics, trigger collection, or generate new server analysis.
 
+The current API contract is:
+
+| Endpoint | Query parameters | Response |
+| --- | --- | --- |
+| `/topics` | None | `{ "topics": [...] }`; each topic includes `today_count`. |
+| `/days` | Optional `topic`, `limit` | `{ "topic": ID or null, "days": [...] }`. |
+| `/digest` | Optional `topic`, `day`, `limit`, `after` | `{ "day": DATE or null, "timezone": TZ, "topics": [...] }`; each topic includes `revision`, `total`, `next`, and `items`. |
+| `/insight` | None | `{ "insight": DOCUMENT or null }`. |
+
+`read` and `search` send only the selected topic, collection day, page size, and pagination cursor to `/digest`. Text matching, importance filtering, ranking, and the final output limit are applied locally.
+
 ## Select news
 
 `read` and `search` accept:
@@ -61,9 +72,9 @@ Inspect `coverage.complete`, `coverage.pages_fetched`, `coverage.max_pages`, `co
 
 When the page cap is reached before exhausting the selected range, results are partial. Even if partial output has no matches, say “no matches in the fetched pages,” rather than “no relevant news.” Broaden coverage by selecting fewer dates/topics or explicitly increasing `--max-pages`. Completeness describes this NEWS query only, not the wider web.
 
-Use `sources[].updated_at` to describe data freshness and `retrieved_at` to describe when the CLI checked it. Do not substitute retrieval time for publication time. Each item includes article fields (`url`, bilingual titles and summaries, `source`, `published_at`, `first_seen_at`, `tags`, `importance`) plus the `topic_ids`, `topic_names`, and collection `days` where it was found. Entries sharing an ID or a URL after tracking-parameter normalization are merged. Preserve returned article URLs for citations or follow-up link requests; apply the display rules in [SKILL.md](../SKILL.md) when composing a briefing. Choose the user's language with the other language as fallback when needed.
+Use `sources[].updated_at` to describe data freshness and `retrieved_at` to describe when the CLI checked it. Each source also retains its topic's `revision`. Do not substitute retrieval time for publication time. Each item includes article fields (`url`, bilingual titles, summaries and tags, `source`, `published_at`, `first_seen_at`, `importance`, `pinned`, and nullable `image`) plus the `topic_ids`, `topic_names`, and collection `days` where it was found. English tags are in `tags_en` and are included in searches. Image metadata includes the image URL, source URL, bilingual captions, credit, and dimensions when supplied. Topic-specific `catalog` and `travel` data is retained when present. Entries sharing an ID or a URL after tracking-parameter normalization are merged. Preserve returned article URLs for citations or follow-up link requests; apply the display rules in [SKILL.md](../SKILL.md) when composing a briefing. Choose the user's language with the other language as fallback when needed.
 
-`insight` returns a separate `{ "insight": ... }` document, or `{ "insight": null }` when no analysis is available. Check `generated_at` and `window_start` and attribute the analysis to NEWS. Its source references and research links are evidence for that existing analysis; it has no `coverage` field.
+`insight` returns a separate `{ "insight": ... }` document, or `{ "insight": null }` when no analysis is available. Check `briefing_day`, `timezone`, `generated_at`, `window_start`, `window_end`, and `trend_window_start`, and attribute the analysis to NEWS. The document contains bilingual `headline` and `changes`, `hotspots`, `gossip`, `figures`, `outlook`, `watch_signals`, `images`, sampling counts, and source references. Retain story confirmation status and outlook kinds when summarizing. Source indexes may be sparse and must keep their original values. Its source references and research links are evidence for that existing analysis; it has no `coverage` field.
 
 ## Shared options
 

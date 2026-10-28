@@ -61,7 +61,7 @@ function normalizeText(value: string): string {
 }
 
 function matchesText(item: NewsItem, query: string): boolean {
-  return [item.title, item.summary, item.title_en, item.summary_en, item.source, ...item.tags]
+  return [item.title, item.summary, item.title_en, item.summary_en, item.source, ...item.tags, ...item.tags_en]
     .some(value => normalizeText(value).includes(query));
 }
 
@@ -176,6 +176,7 @@ export async function queryNews(
       importance: Math.max(target.item.importance, incoming.item.importance),
       pinned: target.item.pinned || incoming.item.pinned,
       tags: [...new Set([...target.item.tags, ...incoming.item.tags])],
+      tags_en: [...new Set([...target.item.tags_en, ...incoming.item.tags_en])],
     };
     for (const id of incoming.ids) { target.ids.add(id); byId.set(id, target); }
     for (const url of incoming.urls) { target.urls.add(url); byUrl.set(url, target); }
@@ -187,13 +188,13 @@ export async function queryNews(
 
   function collect(topic: TopicDigest, day: string): void {
     topicIds.add(topic.id);
-    sources.set(`${topic.id}\n${day}`, { topic_id: topic.id, day, updated_at: topic.updated_at });
+    sources.set(`${topic.id}\n${day}`, { topic_id: topic.id, day, updated_at: topic.updated_at, revision: topic.revision });
     for (const item of topic.items) {
       const url = normalizedUrl(item.url);
       const existingId = item.id ? byId.get(item.id) : undefined;
       const existingUrl = url === null ? undefined : byUrl.get(url);
       const incoming: Group = {
-        item: { ...item, tags: [...item.tags] },
+        item: { ...item, tags: [...item.tags], tags_en: [...item.tags_en] },
         ids: new Set(item.id ? [item.id] : []),
         urls: new Set(url === null ? [] : [url]),
         topics: new Map([[topic.id, topic.name]]),

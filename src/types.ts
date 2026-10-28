@@ -5,7 +5,49 @@ export interface Topic {
   description: string;
   latest_day: string | null;
   updated_at: string | null;
-  today_count?: number;
+}
+
+export interface TopicSummary extends Topic { today_count: number }
+
+export interface NewsImage {
+  url: string;
+  source_url: string;
+  caption: string;
+  caption_en: string;
+  credit: string;
+  width?: number;
+  height?: number;
+}
+
+export interface CatalogEntry {
+  kind: string;
+  name: string;
+  name_en: string;
+  path: string;
+  role: string;
+}
+
+export interface TravelPlace {
+  slug: string;
+  name: string;
+  name_en: string;
+  country: string;
+  country_en: string;
+  latitude: number;
+  longitude: number;
+  tagline: string;
+  tagline_en: string;
+  fact: string;
+  fact_en: string;
+}
+
+export interface TravelEntry {
+  lang: string;
+  text: string;
+  spot: string;
+  spot_en: string;
+  photos: NewsImage[];
+  place: TravelPlace;
 }
 
 export interface NewsItem {
@@ -19,11 +61,16 @@ export interface NewsItem {
   published_at: string | null;
   first_seen_at: string;
   tags: string[];
+  tags_en: string[];
   importance: number;
   pinned: boolean;
+  image: NewsImage | null;
+  catalog?: CatalogEntry;
+  travel?: TravelEntry;
 }
 
 export interface TopicDigest extends Topic {
+  revision: number;
   total: number;
   next: string | null;
   items: NewsItem[];
@@ -32,13 +79,12 @@ export interface TopicDigest extends Topic {
 export interface Digest {
   day: string | null;
   timezone: string;
-  generated_at?: string;
   topics: TopicDigest[];
 }
 
 export interface DayCount { day: string; count: number }
-export interface DaysResponse { days: DayCount[] }
-export interface TopicsResponse { topics: Topic[] }
+export interface DaysResponse { topic: string | null; days: DayCount[] }
+export interface TopicsResponse { topics: TopicSummary[] }
 
 export interface DigestParams {
   topic?: string;
@@ -80,7 +126,7 @@ export interface QueryResult {
   returned: number;
   matched: number;
   items: ResultItem[];
-  sources: { topic_id: string; day: string; updated_at: string | null }[];
+  sources: { topic_id: string; day: string; updated_at: string | null; revision: number }[];
   coverage: {
     complete: boolean;
     pages_fetched: number;

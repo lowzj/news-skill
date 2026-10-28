@@ -11,14 +11,43 @@ const topic = (extra = {}) => ({
   id: 'openai', name: '人工智能', name_en: 'AI', description: 'Public technology news',
   latest_day: DAY, updated_at: TIME, ...extra,
 });
+const digestTopic = (extra = {}) => ({ ...topic(), revision: 7, items: [], total: 0, next: null, ...extra });
+const image = {
+  url: 'https://example.org/image.jpg', source_url: 'https://example.org/photo',
+  caption: '图片说明', caption_en: 'Image caption', credit: 'Example photographer', width: 1200, height: 800,
+};
 const item = (id, extra = {}) => ({
   id, title: `新闻 ${id}`, summary: `摘要 ${id}`, title_en: `News ${id}`, summary_en: `Summary ${id}`,
   url: `https://example.org/news/${id}`, source: 'Example publisher', published_at: TIME,
-  first_seen_at: `${DAY}T11:00:00Z`, tags: ['AI'], importance: 3, pinned: false, ...extra,
+  first_seen_at: `${DAY}T11:00:00Z`, tags: ['人工智能'], tags_en: ['AI'], importance: 3, pinned: false, image: null, ...extra,
 });
 const digest = (items = [], extra = {}) => ({
   day: DAY, timezone: 'Asia/Shanghai',
-  topics: [topic({ items, total: items.length, next: null })], ...extra,
+  topics: [digestTopic({ items, total: items.length })], ...extra,
+});
+const signal = (extra = {}) => ({
+  title: '机会', title_en: 'Opportunity', summary: '值得关注', summary_en: 'Worth watching', source_indexes: [42], ...extra,
+});
+const analysis = (extra = {}) => ({
+  briefing_day: DAY, timezone: 'Asia/Shanghai', generated_at: TIME,
+  window_start: '2026-09-08T10:00:00Z', window_end: TIME, trend_window_start: '2026-09-02T10:00:00Z', model: 'example-model',
+  headline: '综合研判', headline_en: 'Daily analysis', changes: '新增动向', changes_en: 'New developments',
+  changes_source_indexes: [3, 42, 99],
+  images: [{ ...image, index: 42, title: '新闻图片', title_en: 'News image', cover: true, archived: false }],
+  sampling: { current_items: 10, seven_day_items: 70, observed_days: 7 },
+  hotspots: [signal({ short_summary: '简短摘要', angle: '新的角度', angle_en: 'A new angle', status: 'confirmed' })],
+  gossip: [signal({ title: '传闻', title_en: 'A rumor', short_summary: '尚待确认', status: 'unconfirmed' })],
+  picture_source_indexes: [42],
+  figures: [{ value: '42亿元', value_en: '4.2 billion yuan', label: '投资规模', label_en: 'Investment size', source_indexes: [3] }],
+  watch_signals: [signal({ title: '观察信号', title_en: 'A signal to watch' })],
+  cover_source_index: 42,
+  outlook: [signal({ kind: 'opportunity' })],
+  sources: [
+    { index: 3, title: '来源三', title_en: 'Source three', url: 'https://example.org/three', source: 'Publisher A' },
+    { index: 42, title: '来源四十二', title_en: 'Source forty-two', url: 'https://example.org/forty-two', source: 'Publisher B' },
+  ],
+  research_sources: [{ title: 'Research', url: 'https://example.org/research' }],
+  ...extra,
 });
 
 function json(response, body, status = 200) {
@@ -79,17 +108,18 @@ function failure(result, code) {
 
 test('public commands issue only GET requests without authentication and keep stdout machine-readable', async t => {
   const server = await service(t, (_request, response, url) => {
-    if (url.pathname === '/api/topics') json(response, { topics: [topic()] });
-    else if (url.pathname === '/api/days') json(response, { days: [{ day: DAY, count: 12 }] });
+    if (url.pathname === '/api/topics') json(response, { topics: [topic({ today_count: 12 })] });
+    else if (url.pathname === '/api/days') json(response, { topic: url.searchParams.get('topic'), days: [{ day: DAY, count: 12 }] });
     else if (url.pathname === '/api/insight') json(response, { insight: null });
     else json(response, { error: { message: 'unexpected endpoint' } }, 404);
   });
   const base = `${server.url}/api`;
-  assert.equal(JSON.parse(success(await run(base, ['topics']))).topics[0].id, 'openai');
+  assert.deepEqual(JSON.parse(success(await run(base, ['topics']))).topics, [topic({ today_count: 12 })]);
   const days = JSON.parse(success(await run(base, ['days', '--topic', 'claude & code', '--limit', '2'])));
-  assert.deepEqual(days.days, [{ day: DAY, count: 12 }]);
+  assert.deepEqual(days, { topic: 'claude & code', days: [{ day: DAY, count: 12 }] });
+  assert.deepEqual(JSON.parse(success(await run(base, ['days']))), { topic: null, days: [{ day: DAY, count: 12 }] });
   assert.deepEqual(JSON.parse(success(await run(base, ['insight']))), { insight: null });
-  assert.deepEqual(server.requests.map(request => request.url.pathname), ['/api/topics', '/api/days', '/api/insight']);
+  assert.deepEqual(server.requests.map(request => request.url.pathname), ['/api/topics', '/api/days', '/api/days', '/api/insight']);
   assert.equal(server.requests[1].url.searchParams.get('topic'), 'claude & code');
   assert.equal(server.requests[1].url.searchParams.get('limit'), '2');
   for (const request of server.requests) {
@@ -101,12 +131,12 @@ test('public commands issue only GET requests without authentication and keep st
   }
 });
 
-test('read returns the top three across pages without generated_at, globally or for a topic', async t => {
+test('read uses current digest requests and ranks the top three across pages, globally or for a topic', async t => {
   const server = await service(t, (_request, response, url) => {
     assert.equal(url.pathname, '/digest');
     json(response, url.searchParams.has('after')
       ? digest([item('third', { importance: 3 }), item('first', { importance: 5 })])
-      : digest([], { topics: [topic({
+      : digest([], { topics: [digestTopic({
         items: [item('fourth', { importance: 2 }), item('second', { importance: 4 })],
         total: 4, next: 'next-page',
       })] }));
@@ -119,9 +149,11 @@ test('read returns the top three across pages without generated_at, globally or 
     assert.equal(result.coverage.complete, true);
     assert.equal(result.coverage.pages_fetched, 2);
     assert.deepEqual(result.coverage.days, [DAY]);
-    assert.deepEqual(result.sources, [{ topic_id: 'openai', day: DAY, updated_at: TIME }]);
+    assert.deepEqual(result.sources, [{ topic_id: 'openai', day: DAY, updated_at: TIME, revision: 7 }]);
   }
   assert.equal(server.requests.length, 4);
+  assert.deepEqual(Object.fromEntries(server.requests[0].url.searchParams), { limit: '128' });
+  assert.deepEqual(Object.fromEntries(server.requests[2].url.searchParams), { topic: 'openai', limit: '128' });
   for (const request of [server.requests[1], server.requests[3]]) {
     assert.equal(request.url.searchParams.get('after'), 'next-page');
     assert.equal(request.url.searchParams.get('topic'), 'openai');
@@ -129,11 +161,21 @@ test('read returns the top three across pages without generated_at, globally or 
   }
 });
 
-test('read still accepts legacy digest responses with generated_at', async t => {
-  const server = await service(t, (_request, response) => json(response, digest([item('legacy')], { generated_at: TIME })));
-  const result = JSON.parse(success(await run(server.url, ['read', '--limit', '3', '--sort', 'importance'])));
-  assert.deepEqual(result.items.map(row => row.id), ['legacy']);
-  assert.equal(result.coverage.complete, true);
+test('read retains current bilingual tags, images, catalog entries, and travel data', async t => {
+  const catalog = { kind: 'book', name: '示例书', name_en: 'Example book', path: '/culture/book/example', role: 'news' };
+  const travel = {
+    lang: 'ja', text: '小樽運河', spot: '小樽运河', spot_en: 'Otaru Canal', photos: [image],
+    place: { slug: 'otaru', name: '小樽', name_en: 'Otaru', country: '日本', country_en: 'Japan',
+      latitude: 43.19, longitude: 140.99, tagline: '港城', tagline_en: 'Port city', fact: '运河建于1923年', fact_en: 'The canal opened in 1923' },
+  };
+  const server = await service(t, (_request, response) => json(response, digest([
+    item('photo', { image }), item('book', { catalog }), item('trip', { travel }),
+  ])));
+  const result = JSON.parse(success(await run(server.url, ['read'])));
+  assert.deepEqual(result.items.find(row => row.id === 'photo').image, image);
+  assert.deepEqual(result.items.find(row => row.id === 'book').catalog, catalog);
+  assert.deepEqual(result.items.find(row => row.id === 'trip').travel, travel);
+  assert.deepEqual(result.items[0].tags_en, ['AI']);
 });
 
 test('search follows escaped cursors, ranks across pages, and renders original links with publication and collection dates', async t => {
@@ -143,7 +185,7 @@ test('search follows escaped cursors, ranks across pages, and renders original l
   const server = await service(t, (_request, response, url) => {
     const next = url.searchParams.get('after');
     json(response, next === null
-      ? digest([], { topics: [topic({ items: [old], total: 2, next: cursor })] })
+      ? digest([], { topics: [digestTopic({ items: [old], total: 2, next: cursor })] })
       : digest([recent]));
   });
   const args = ['search', 'Claude Code', '--topic', 'openai', '--day', DAY, '--limit', '1'];
@@ -166,7 +208,7 @@ test('search follows escaped cursors, ranks across pages, and renders original l
 
 test('a scan limit is explicit in JSON coverage and readable Markdown', async t => {
   const server = await service(t, (_request, response) => json(response, digest([], {
-    topics: [topic({ items: [item('one')], total: 2, next: 'more' })],
+    topics: [digestTopic({ items: [item('one')], total: 2, next: 'more' })],
   })));
   const args = ['read', '--day', DAY, '--max-pages', '1'];
   const result = JSON.parse(success(await run(server.url, args)));
@@ -207,9 +249,10 @@ test('HTML 200, malformed JSON, and unexpected schemas fail without partial stdo
 test('digest schema validation rejects impossible calendar dates and malformed news fields', async t => {
   for (const [label, payload] of [
     ['impossible day', digest([], { day: '2026-02-30' })],
-    ['null generated_at', digest([], { generated_at: null })],
-    ['non-string generated_at', digest([], { generated_at: 123 })],
-    ['invalid generated_at', digest([], { generated_at: 'not-a-timestamp' })],
+    ['missing revision', digest([], { topics: [digestTopic({ revision: undefined })] })],
+    ['missing English tags', digest([item('bad', { tags_en: undefined })])],
+    ['missing image', digest([item('bad', { image: undefined })])],
+    ['invalid image width', digest([item('bad', { image: { ...image, width: -1 } })])],
     ['invalid importance', digest([item('bad', { importance: 7 })])],
     ['missing tags', digest([item('bad', { tags: undefined })])],
     ['invalid timezone', digest([], { timezone: 'not/a/timezone' })],
@@ -288,29 +331,43 @@ test('Markdown neutralizes service HTML, terminal escapes, and links with unsafe
 });
 
 test('insight retains sparse source indexes in JSON and Markdown, and handles missing analysis', async t => {
-  const insight = {
-    generated_at: TIME, window_start: '2026-09-08T10:00:00Z',
-    headline: '综合研判', headline_en: 'Daily analysis', overview: '总体变化', overview_en: 'Overview',
-    changes: '新增动向', changes_en: 'New developments', changes_source_indexes: [3, 42, 99],
-    wealth: [{ title: '机会', title_en: 'Opportunity', summary: '值得关注', summary_en: 'Worth watching', source_indexes: [42] }],
-    employment: [], risks: [], actions: [],
-    sources: [
-      { index: 3, title: '来源三', title_en: 'Source three', url: 'https://example.org/three', source: 'Publisher A' },
-      { index: 42, title: '来源四十二', title_en: 'Source forty-two', url: 'https://example.org/forty-two', source: 'Publisher B' },
-    ],
-    research_sources: [{ title: 'Research', url: 'https://example.org/research' }],
-  };
+  let insight = analysis();
   let available = true;
   const server = await service(t, (_request, response) => json(response, { insight: available ? insight : null }));
   const data = JSON.parse(success(await run(server.url, ['insight'])));
-  assert.deepEqual(data.insight.sources.map(source => source.index), [3, 42]);
+  assert.deepEqual(data.insight, insight);
   const markdown = success(await run(server.url, ['insight', '--format', 'markdown', '--lang', 'en']));
   assert.match(markdown, /New developments \[3\] \[42\]/);
   assert.match(markdown, /Worth watching \[42\]/);
+  for (const title of ['Hotspots', 'Key figures', 'Gossip', 'Outlook', 'Watch signals', 'Related images']) assert.ok(markdown.includes(`## ${title}`));
+  assert.match(markdown, /Briefing day: 2026-09-09 · Asia\/Shanghai/);
+  assert.match(markdown, /Analysis window: 2026-09-08T10:00:00Z – 2026-09-09T10:00:00Z/);
+  assert.match(markdown, /Confirmed/);
+  assert.match(markdown, /Unconfirmed/);
+  assert.match(markdown, /Angle: A new angle/);
+  assert.match(markdown, /4\.2 billion yuan/);
+  assert.match(markdown, /Image caption/);
   assert.ok(markdown.includes('- [42] [Source forty-two](<https://example.org/forty-two>)'));
   assert.doesNotMatch(markdown, /\[99\]|- \[1\]|- \[2\]/);
   assert.ok(markdown.includes('[Research](<https://example.org/research>)'));
+  insight = analysis({ cover_source_index: null, images: [], hotspots: [], gossip: [], figures: [], outlook: [], watch_signals: [], picture_source_indexes: [] });
+  assert.deepEqual(JSON.parse(success(await run(server.url, ['insight']))).insight, insight);
   available = false;
   assert.deepEqual(JSON.parse(success(await run(server.url, ['insight']))), { insight: null });
   assert.match(success(await run(server.url, ['insight', '--format', 'markdown'])), /暂无综合研判/);
+});
+
+test('insight validates the current response fields', async t => {
+  for (const [label, insight] of [
+    ['missing hotspots', analysis({ hotspots: undefined })],
+    ['invalid sampling', analysis({ sampling: { current_items: -1, seven_day_items: 70, observed_days: 7 } })],
+    ['missing source indexes', analysis({ watch_signals: [signal({ source_indexes: undefined })] })],
+    ['invalid window end', analysis({ window_end: 'not-a-timestamp' })],
+    ['invalid timezone', analysis({ timezone: 'not/a/timezone' })],
+  ]) {
+    await t.test(label, async inner => {
+      const server = await service(inner, (_request, response) => json(response, { insight }));
+      failure(await run(server.url, ['insight']), 'INVALID_RESPONSE');
+    });
+  }
 });

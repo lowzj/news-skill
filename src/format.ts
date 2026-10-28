@@ -20,9 +20,10 @@ function link(title: string, url: string): string {
   }
 }
 
-function localized(row: { [key: string]: unknown }, key: string, lang: Language): string {
-  const english = row[`${key}_en`];
-  const native = row[key];
+function localized(row: object, key: string, lang: Language): string {
+  const values = row as Record<string, unknown>;
+  const english = values[`${key}_en`];
+  const native = values[key];
   return lang === 'en' && typeof english === 'string' && english.trim()
     ? english : typeof native === 'string' ? native : '';
 }
@@ -97,17 +98,41 @@ export function formatInsight(data: InsightResponse, lang: Language): string {
   const insight = data.insight;
   if (!insight) return en ? 'No NEWS analysis is available yet.' : 'NEWS 暂无综合研判。';
   const lines = [`# ${escapeMarkdown(localized(insight, 'headline', lang))}`, '',
+    `${en ? 'Briefing day' : '简报日期'}: ${insight.briefing_day} · ${escapeMarkdown(insight.timezone)}`,
     `${en ? 'NEWS AI analysis · Generated' : 'NEWS AI 综合研判 · 生成时间'}: ${escapeMarkdown(insight.generated_at)}`,
-    `${en ? 'Analysis window starts' : '分析窗口起点'}: ${escapeMarkdown(insight.window_start)}`, '',
-    escapeMarkdown(localized(insight, 'overview', lang)), '',
+    `${en ? 'Analysis window' : '分析窗口'}: ${escapeMarkdown(insight.window_start)} – ${escapeMarkdown(insight.window_end)}`,
+    `${en ? 'Trend window starts' : '趋势窗口起点'}: ${escapeMarkdown(insight.trend_window_start)}`, '',
     `${escapeMarkdown(localized(insight, 'changes', lang))} ${references(insight.changes_source_indexes, insight)}`, ''];
-  const sections = [['wealth', '商业与机遇', 'Business and opportunities'], ['employment', '就业与技能', 'Employment and skills'],
-    ['risks', '风险预警', 'Risks'], ['actions', '观察方向', 'What to watch']] as const;
+  const labels: Record<string, [string, string]> = {
+    confirmed: ['已确认', 'Confirmed'], unconfirmed: ['未确认', 'Unconfirmed'], response: ['回应', 'Response'],
+    opportunity: ['商业与机遇', 'Opportunity'], employment: ['就业与技能', 'Employment'],
+    risk: ['风险', 'Risk'], action: ['行动', 'Action'],
+  };
+  const sections = [
+    ['hotspots', '热点', 'Hotspots'], ['figures', '关键数字', 'Key figures'], ['gossip', '八卦', 'Gossip'],
+    ['outlook', '展望', 'Outlook'], ['watch_signals', '观察信号', 'Watch signals'],
+  ] as const;
   for (const [key, chinese, english] of sections) {
     if (!insight[key].length) continue;
     lines.push(`## ${en ? english : chinese}`, '');
-    for (const signal of insight[key]) {
-      lines.push(`- **${escapeMarkdown(localized(signal, 'title', lang))}** — ${escapeMarkdown(localized(signal, 'summary', lang))} ${references(signal.source_indexes, insight)}`);
+    if (key === 'figures') {
+      for (const figure of insight.figures) {
+        lines.push(`- **${escapeMarkdown(localized(figure, 'value', lang))}** — ${escapeMarkdown(localized(figure, 'label', lang))} ${references(figure.source_indexes, insight)}`);
+      }
+    } else {
+      for (const signal of insight[key]) {
+        const tag = 'status' in signal ? signal.status : 'kind' in signal ? signal.kind : '';
+        const label = typeof tag === 'string' && tag ? ` · ${escapeMarkdown(labels[tag]?.[en ? 1 : 0] ?? tag)}` : '';
+        lines.push(`- **${escapeMarkdown(localized(signal, 'title', lang))}**${label} — ${escapeMarkdown(localized(signal, 'summary', lang))} ${references(signal.source_indexes, insight)}`);
+        if ('angle' in signal) lines.push(`  ${en ? 'Angle' : '观察角度'}: ${escapeMarkdown(localized(signal, 'angle', lang))}`);
+      }
+    }
+    lines.push('');
+  }
+  if (insight.images.length) {
+    lines.push(en ? '## Related images' : '## 相关图片', '');
+    for (const image of insight.images) {
+      lines.push(`- ${link(localized(image, 'title', lang), image.url)} — ${escapeMarkdown(localized(image, 'caption', lang))} · ${escapeMarkdown(image.credit)} ${references([image.index], insight)}`);
     }
     lines.push('');
   }
