@@ -16,6 +16,13 @@ const image = {
   url: 'https://example.org/image.jpg', source_url: 'https://example.org/photo',
   caption: '图片说明', caption_en: 'Image caption', credit: 'Example photographer', width: 1200, height: 800,
 };
+const travel = (place = {}) => ({
+  lang: 'ja', text: '小樽運河', spot: '小樽运河', spot_en: 'Otaru Canal', photos: [image],
+  place: { slug: 'otaru', name: '小樽', name_en: 'Otaru', country: '日本', country_en: 'Japan',
+    latitude: 43.19, longitude: 140.99, tagline: '港城', tagline_en: 'Port city', fact: '运河建于1923年', fact_en: 'The canal opened in 1923',
+    ...place },
+});
+const travelDescriptionFields = ['tagline', 'tagline_en', 'fact', 'fact_en'];
 const item = (id, extra = {}) => ({
   id, title: `新闻 ${id}`, summary: `摘要 ${id}`, title_en: `News ${id}`, summary_en: `Summary ${id}`,
   url: `https://example.org/news/${id}`, source: 'Example publisher', published_at: TIME,
@@ -163,19 +170,63 @@ test('read uses current digest requests and ranks the top three across pages, gl
 
 test('read retains current bilingual tags, images, catalog entries, and travel data', async t => {
   const catalog = { kind: 'book', name: '示例书', name_en: 'Example book', path: '/culture/book/example', role: 'news' };
-  const travel = {
-    lang: 'ja', text: '小樽運河', spot: '小樽运河', spot_en: 'Otaru Canal', photos: [image],
-    place: { slug: 'otaru', name: '小樽', name_en: 'Otaru', country: '日本', country_en: 'Japan',
-      latitude: 43.19, longitude: 140.99, tagline: '港城', tagline_en: 'Port city', fact: '运河建于1923年', fact_en: 'The canal opened in 1923' },
-  };
+  const trip = travel();
   const server = await service(t, (_request, response) => json(response, digest([
-    item('photo', { image }), item('book', { catalog }), item('trip', { travel }),
+    item('photo', { image }), item('book', { catalog }), item('trip', { travel: trip }),
   ])));
   const result = JSON.parse(success(await run(server.url, ['read'])));
   assert.deepEqual(result.items.find(row => row.id === 'photo').image, image);
   assert.deepEqual(result.items.find(row => row.id === 'book').catalog, catalog);
-  assert.deepEqual(result.items.find(row => row.id === 'trip').travel, travel);
+  assert.deepEqual(result.items.find(row => row.id === 'trip').travel, trip);
   assert.deepEqual(result.items[0].tags_en, ['AI']);
+});
+
+test('read preserves each nullable travel place description independently', async t => {
+  for (const field of travelDescriptionFields) {
+    await t.test(field, async inner => {
+      const trip = travel({ [field]: null });
+      const server = await service(inner, (_request, response) => json(response, digest([item('trip', { travel: trip })])));
+      const result = JSON.parse(success(await run(server.url, ['read'])));
+      assert.deepEqual(result.items[0].travel, trip);
+    });
+  }
+});
+
+test('read and search retain mixed digests with all nullable travel place descriptions', async t => {
+  const trip = travel(Object.fromEntries(travelDescriptionFields.map(field => [field, null])));
+  const items = [item('ordinary'), item('complete-trip', { travel: travel() }), item('nullable-trip', { travel: trip })];
+  const server = await service(t, (_request, response) => json(response, digest(items, {
+    topics: [digestTopic({ id: 'travel', items, total: items.length })],
+  })));
+  for (const args of [['read'], ['search', 'Summary']]) {
+    await t.test(args[0], async () => {
+      const result = JSON.parse(success(await run(server.url, [...args, '--topic', 'travel', '--day', DAY])));
+      assert.deepEqual(result.items.map(row => row.id).sort(), items.map(row => row.id).sort());
+      assert.equal(result.items.find(row => row.id === 'ordinary').travel, undefined);
+      assert.deepEqual(result.items.find(row => row.id === 'complete-trip').travel, travel());
+      assert.deepEqual(result.items.find(row => row.id === 'nullable-trip').travel, trip);
+      assert.equal(result.returned, 3);
+      assert.equal(result.matched, 3);
+      assert.equal(result.coverage.complete, true);
+      assert.equal(result.coverage.pages_fetched, 1);
+      assert.deepEqual(result.coverage.days, [DAY]);
+      assert.deepEqual(result.coverage.topic_ids, ['travel']);
+    });
+  }
+});
+
+test('nullable travel place descriptions still reject malformed and missing values', async t => {
+  for (const field of travelDescriptionFields) {
+    for (const [label, value] of [['number', 42], ['object', {}], ['missing', undefined]]) {
+      await t.test(`${field}: ${label}`, async inner => {
+        const server = await service(inner, (_request, response) => json(response, digest([
+          item('trip', { travel: travel({ [field]: value }) }),
+        ])));
+        const error = failure(await run(server.url, ['read']), 'INVALID_RESPONSE');
+        assert.ok(error.message.includes(`place.${field} must be a string`), error.message);
+      });
+    }
+  }
 });
 
 test('search follows escaped cursors, ranks across pages, and renders original links with publication and collection dates', async t => {

@@ -128,10 +128,10 @@ function parseTravel(value: unknown): TravelEntry {
       country_en: string(place.country_en, 'place.country_en'),
       latitude: number(place.latitude, 'place.latitude', -90, 90),
       longitude: number(place.longitude, 'place.longitude', -180, 180),
-      tagline: string(place.tagline, 'place.tagline'),
-      tagline_en: string(place.tagline_en, 'place.tagline_en'),
-      fact: string(place.fact, 'place.fact'),
-      fact_en: string(place.fact_en, 'place.fact_en'),
+      tagline: optionalString(place.tagline, 'place.tagline'),
+      tagline_en: optionalString(place.tagline_en, 'place.tagline_en'),
+      fact: optionalString(place.fact, 'place.fact'),
+      fact_en: optionalString(place.fact_en, 'place.fact_en'),
     },
   };
 }

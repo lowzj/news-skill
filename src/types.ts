@@ -35,10 +35,10 @@ export interface TravelPlace {
   country_en: string;
   latitude: number;
   longitude: number;
-  tagline: string;
-  tagline_en: string;
-  fact: string;
-  fact_en: string;
+  tagline: string | null;
+  tagline_en: string | null;
+  fact: string | null;
+  fact_en: string | null;
 }
 
 export interface TravelEntry {
